@@ -36,11 +36,10 @@ int c = 0;
 void handle_oled(int progress) {
   char buffer[32];
 
-  
-  
   u8g2.clearBuffer();
   u8g2.setBitmapMode(1);
   u8g2.drawFrame(12, 21, 104, 20);
+
   u8g2.drawBox(14, 23, progress, 16); // draw the progressbar fill
   u8g2.setFont(u8g2_font_helvB08_tr);
   sprintf(buffer, "Level: %d%%", progress); // construct a string with the progress variable

@@ -79,6 +79,26 @@ ReactESP app([]() {
 
   sensesp_app = new SensESPApp();
 
+// sensor to send percentages to signalk
+
+FloatSensor* water_level = new FloatSensor(); 
+water_level->connect_to(	     
+   new SKOutputNumber("tanks.freshWater.0.currentLevel"));	
+	
+    // If you wanted to add a third, fourth, or more sensor, you would do that
+    // here. An ESP9266 should easily handle four or five sensors, and an ESP32
+    // should handle eight or ten, or more.
+
+
+// update display with liveness info
+
+//  app.onRepeat(1000,[water_level] () {
+//     handle_oled(c);
+//     c++;
+     //     water_level->set(c);
+//  });
+
+  
 // sensor to read pin and do something with the pin
    int read_delay = 10;
    String read_delay_config_path = "/button_watcher/read_delay";
@@ -92,10 +112,13 @@ ReactESP app([]() {
  * While this approach - defining the lambda function (above) separate from the
  * LambdaConsumer (below) - is simpler to understand, there is a more concise approach:
  */ 
-  auto* button_consumer = new LambdaConsumer<int>([](int input) {
-    if (1) {
-      c++;
-      handle_oled(c);
+  auto* button_consumer = new LambdaConsumer<int>([water_level](int input) {
+    if (input==1) {
+      water_level->set(1.0);
+      handle_oled(100);
+    } else {
+      water_level->set(0.0);
+      handle_oled(0);
     }
   });
 
@@ -117,24 +140,6 @@ auto* debounce = new DebounceInt(debounce_delay, debounce_config_path);
 button_watcher->connect_to(button_consumer);
 
 
-// sensor to send percentages to signalk
-
-FloatSensor* water_level = new FloatSensor(); 
-water_level->connect_to(	     
-   new SKOutputNumber("tanks.freshWater.0.currentLevel"));	
-	
-    // If you wanted to add a third, fourth, or more sensor, you would do that
-    // here. An ESP9266 should easily handle four or five sensors, and an ESP32
-    // should handle eight or ten, or more.
-
-
-// update display with liveness info
-
-//  app.onRepeat(1000,[water_level] () {
-//     handle_oled(c);
-//     c++;
-     //     water_level->set(c);
-//  });
 
  handle_oled(0);
 

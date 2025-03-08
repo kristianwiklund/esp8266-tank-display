@@ -38,13 +38,15 @@ void handle_oled(int c) {
 #include "transforms/frequency.h"
 #include "signalk/signalk_output.h"
 #include "sensors/analog_input.h"
+#include "transforms/debounce.h"
 
-float waterlevel=0.0;
+//////////////////////////////////////////
+// sensor class to send a float to signalk
 
-class FulSensor: public NumericSensor {
+class FloatSensor: public NumericSensor {
 
  public:
-   FulSensor();
+   FloatSensor();
 
    void set(float);
 
@@ -53,14 +55,16 @@ class FulSensor: public NumericSensor {
 
 };
 
-FulSensor::FulSensor() {
+FloatSensor::FloatSensor() {
 }
 
-void FulSensor::set(float ap) {
+void FloatSensor::set(float ap) {
   thevalue=ap;
   this->emit(ap);
   }
-  
+
+///////////////////////////////
+// SensEsp app below
 
 ReactESP app([]() {
 
@@ -75,7 +79,47 @@ ReactESP app([]() {
 
   sensesp_app = new SensESPApp();
 
-FulSensor* water_level = new FulSensor(); 
+// sensor to read pin and do something with the pin
+   int read_delay = 10;
+   String read_delay_config_path = "/button_watcher/read_delay";
+   auto* button_watcher = new DigitalInputChange(D3, INPUT_PULLUP, CHANGE, read_delay, read_delay_config_path); 
+
+
+/** 
+ * Create the LambdaConsumer that calls reset_function, Because DigitalInputChange
+ * outputs an int, the version of LambdaConsumer we need is LambdaConsumer<int>.
+ * 
+ * While this approach - defining the lambda function (above) separate from the
+ * LambdaConsumer (below) - is simpler to understand, there is a more concise approach:
+ */ 
+  auto* button_consumer = new LambdaConsumer<int>([](int input) {
+    if (1) {
+      c++;
+      handle_oled(c);
+    }
+  });
+
+
+//auto* button_consumer = new LambdaConsumer<int>(reset_function);
+
+/** 
+ * Create a DebounceInt to make sure we get a nice, clean signal from the button.
+ * Set the debounce delay period to 15 ms, which can be configured at debounce_config_path
+ * in the Config UI.
+*/
+
+int debounce_delay = 15;
+String debounce_config_path = "/debounce/delay";
+auto* debounce = new DebounceInt(debounce_delay, debounce_config_path);
+
+
+/* Connect the button_watcher to the debounce to the button_consumer. */
+button_watcher->connect_to(button_consumer);
+
+
+// sensor to send percentages to signalk
+
+FloatSensor* water_level = new FloatSensor(); 
 water_level->connect_to(	     
    new SKOutputNumber("tanks.freshWater.0.currentLevel"));	
 	
@@ -83,12 +127,16 @@ water_level->connect_to(
     // here. An ESP9266 should easily handle four or five sensors, and an ESP32
     // should handle eight or ten, or more.
 
-  app.onRepeat(1000,[water_level] () {
-     handle_oled(c);
-     c++;
-     water_level->set(c);
-  });
 
+// update display with liveness info
+
+//  app.onRepeat(1000,[water_level] () {
+//     handle_oled(c);
+//     c++;
+     //     water_level->set(c);
+//  });
+
+ handle_oled(0);
 
   sensesp_app->enable();
 });

@@ -8,27 +8,16 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, OLED_RESET, OLED_SCL, OLED_SDA
 
 int c = 0;
 
-void handle_oled(int c) {
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_ncenB08_tr);
-  u8g2.drawStr(0, 10, "Display is working!");
-  u8g2.drawStr(0, 30, "Have fun with it");
-  char buffer[20];
-  snprintf(buffer, sizeof(buffer), "Uptime: %ds", c);
-  u8g2.drawStr(0, 50, buffer);
-  u8g2.sendBuffer();
-}
-
-/* void setup() {
-  u8g2.begin();
-}*/
-
-/* void loop() {
-  handle_oled(c);
-  c++;
-  delay(1000);
-} */
-
+// void handle_oled(int c) {
+//   u8g2.clearBuffer();
+//   u8g2.setFont(u8g2_font_ncenB08_tr);
+//   u8g2.drawStr(0, 10, "Display is working!");
+//   u8g2.drawStr(0, 30, "Have fun with it");
+//   char buffer[20];
+//   snprintf(buffer, sizeof(buffer), "Uptime: %ds", c);
+//   u8g2.drawStr(0, 50, buffer);
+//   u8g2.sendBuffer();
+// }
 
 #define USE_LIB_WEBSOCKET true
 
@@ -41,25 +30,58 @@ void handle_oled(int c) {
 #include "transforms/debounce.h"
 
 //////////////////////////////////////////
+// draw a bar indicating the tank volume
+// progress bar code from https://github.com/upiir/arduino_oled_lopaka/tree/main
+
+void handle_oled(int progress) {
+  char buffer[32];
+
+  
+  
+  u8g2.clearBuffer();
+  u8g2.setBitmapMode(1);
+  u8g2.drawFrame(12, 21, 104, 20);
+  u8g2.drawBox(14, 23, progress, 16); // draw the progressbar fill
+  u8g2.setFont(u8g2_font_helvB08_tr);
+  sprintf(buffer, "Level: %d%%", progress); // construct a string with the progress variable
+  u8g2.drawStr(33, 53, buffer); // display the string
+  u8g2.setFont(u8g2_font_haxrcorp4089_tr);
+  u8g2.drawStr(0, 7, "Freshwater Tank");
+  u8g2.drawLine(0, 9, 127, 9);
+  u8g2.sendBuffer();
+}
+
+
+//////////////////////////////////////////
 // sensor class to send a float to signalk
 
 class FloatSensor: public NumericSensor {
 
  public:
-   FloatSensor();
-
+  FloatSensor();
+  FloatSensor(unsigned int);
+  
    void set(float);
 
  private:
    float thevalue;
-
+  unsigned int resend_interval;
 };
 
 FloatSensor::FloatSensor() {
+  this->resend_interval=0;
+}
+
+FloatSensor::FloatSensor(unsigned int resend_interval) {
+  this->resend_interval=resend_interval;
+
+  if (resend_interval) {
+    app.onRepeat(resend_interval, [this]() {this->emit(this->thevalue);});
+  }
 }
 
 void FloatSensor::set(float ap) {
-  thevalue=ap;
+  this->thevalue=ap;
   this->emit(ap);
   }
 
@@ -79,25 +101,13 @@ ReactESP app([]() {
 
   sensesp_app = new SensESPApp();
 
-// sensor to send percentages to signalk
+// sensor to send percentages to signalk, send the volume once per minute
+// (the freshwater tank is not very time-sensitive, but we need an update more
+// often than the sensors trigger the measurements)
 
-FloatSensor* water_level = new FloatSensor(); 
+FloatSensor* water_level = new FloatSensor(60000); 
 water_level->connect_to(	     
    new SKOutputNumber("tanks.freshWater.0.currentLevel"));	
-	
-    // If you wanted to add a third, fourth, or more sensor, you would do that
-    // here. An ESP9266 should easily handle four or five sensors, and an ESP32
-    // should handle eight or ten, or more.
-
-
-// update display with liveness info
-
-//  app.onRepeat(1000,[water_level] () {
-//     handle_oled(c);
-//     c++;
-     //     water_level->set(c);
-//  });
-
   
 // sensor to read pin and do something with the pin
    int read_delay = 10;
@@ -138,8 +148,6 @@ auto* debounce = new DebounceInt(debounce_delay, debounce_config_path);
 
 /* Connect the button_watcher to the debounce to the button_consumer. */
 button_watcher->connect_to(button_consumer);
-
-
 
  handle_oled(0);
 

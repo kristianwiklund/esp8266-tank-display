@@ -16,13 +16,23 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, OLED_RESET, OLED_SCL, OLED_SDA
 #include "sensors/analog_input.h"
 #include "transforms/debounce.h"
 
+/////////////////////////////////
+// configurations
+
+int pins[] = {D3}; // array of input pins
+const int numpins = sizeof(pins)/sizeof(int);
+
+int inputs[numpins];
+
+
+
 //////////////////////////////////////////
 // draw a bar indicating the tank volume
 // progress bar code from https://github.com/upiir/arduino_oled_lopaka/tree/main
 
 void handle_oled(int progress) {
   char buffer[32];
-
+  
   u8g2.clearBuffer();
   u8g2.setBitmapMode(1);
   u8g2.drawFrame(12, 21, 104, 20);
@@ -74,10 +84,36 @@ void FloatSensor::set(float ap) {
   this->emit(ap);
 }
 
+/////////////////////////////////////////////////////////
+// calculate tank level based on which sensor was trigged
+
+float calclevel(int value, unsigned int sensor) {
+
+  Serial.println("calclevel called");
+  Serial.println(value);
+  Serial.println(sensor);
+  
+  inputs[sensor]=value;
+
+  Serial.println("inputs array set successfully, going to iterator");
+  
+  for (int i=numpins;i>0;i--) {
+    Serial.println(i);
+    if(inputs[i-1]) {
+      Serial.print("Returning value=");
+      Serial.println((1.0*i)/numpins);
+      return ((1.0*i)/numpins);
+    }
+  }
+  Serial.println("Returning 0.0");
+  return 0.0;
+}
+
 ///////////////////////////////
 // SensEsp app below
 
 ReactESP app([]() {
+  float lvl;
   
   u8g2.begin();
 
@@ -95,19 +131,32 @@ ReactESP app([]() {
   
   FloatSensor* water_level = new FloatSensor(60000); 
   water_level->connect_to(new SKOutputNumber("tanks.freshWater.0.currentLevel"));	
+
+  /////////////////////////////////////////////////////////////
+  // start at zero then go up once we start reading the sensors
+  Serial.println("Clearing display and old readings in SignalK");
+  water_level->set(0.0);
+  handle_oled(0);
   
   ////////////////////////////////////////////
   // instantiate sensors to read the input pins
   // store the sensors in an array of sensors watching the pins
-  
-  int pins[] = {D3}; // array of input pins  
-  DigitalInputChange *bws[sizeof(pins)];
 
-  for (unsigned int i=0;i<sizeof(pins);i++) {    
+  
+  DigitalInputChange *bws[numpins];
+
+  for (unsigned int i=0;i<numpins;i++) {    
     int read_delay = 10;
     String read_delay_config_path = "/button_watcher/read_delay";
-    bws[i] = new DigitalInputChange(pins[i], INPUT_PULLUP, CHANGE, read_delay, read_delay_config_path); 
+    bws[i] = new DigitalInputChange(pins[i], INPUT_PULLUP, CHANGE, read_delay, read_delay_config_path);
+    inputs[i]=digitalRead(pins[i]);
+    lvl = calclevel(inputs[i],i);
   }
+  // and update with the current level
+  
+  handle_oled((int)(100*lvl));
+  water_level->set(lvl);
+  
     
   ///////////////////////////////////////
   // do things with the received pins
@@ -118,26 +167,21 @@ ReactESP app([]() {
    */
   // create another array of consumers
 
-  LambdaConsumer<int> *bcs[sizeof(pins)];
+  LambdaConsumer<int> *bcs[numpins];
   
-  for (unsigned int i=0;i<sizeof(pins);i++) {
-    
-    bcs[i] = new LambdaConsumer<int>([water_level](int input) {
-      if (input==1) {
-	water_level->set(1.0);
-	handle_oled(100);
-      } else {
-	water_level->set(0.0);
-	handle_oled(0);
-      }
+  for (unsigned int i=0;i<numpins;i++) {
+
+    // https://stackoverflow.com/questions/9554102/in-lambda-functions-syntax-what-purpose-does-a-capture-list-serve
+    bcs[i] = new LambdaConsumer<int>([=,water_level,i](int input) {
+      float lvl;
+      lvl = calclevel(input,i);
+      water_level->set(lvl);
+      handle_oled((int)(100*lvl));
     });
 
     // connect the input to the function that do the magic
     bws[i]->connect_to(bcs[i]);
   }
-  
-  // display something
-  handle_oled(0);
-  
+    
   sensesp_app->enable();
 });

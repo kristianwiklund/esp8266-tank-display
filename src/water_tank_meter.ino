@@ -19,7 +19,9 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, OLED_RESET, OLED_SCL, OLED_SDA
 /////////////////////////////////
 // configurations
 
-int pins[] = {D3}; // array of input pins
+const int broadcast_interval=10; // seconds between transmits
+
+int pins[] = {D1,D2,D3}; // array of input pins
 const int numpins = sizeof(pins)/sizeof(int);
 
 int inputs[numpins];
@@ -89,8 +91,9 @@ void FloatSensor::set(float ap) {
 
 float calclevel(int value, unsigned int sensor) {
 
-  Serial.println("calclevel called");
-  Serial.println(value);
+  Serial.print("calclevel called with value ");
+  Serial.print(value);
+  Serial.print(" from pin id ");
   Serial.println(sensor);
   
   inputs[sensor]=value;
@@ -102,6 +105,7 @@ float calclevel(int value, unsigned int sensor) {
     if(inputs[i-1]) {
       Serial.print("Returning value=");
       Serial.println((1.0*i)/numpins);
+      Serial.println("=======================");
       return ((1.0*i)/numpins);
     }
   }
@@ -129,7 +133,7 @@ ReactESP app([]() {
   // (the freshwater tank is not very time-sensitive, but we need an update more
   // often than the sensors trigger the measurements)
   
-  FloatSensor* water_level = new FloatSensor(60000); 
+  FloatSensor* water_level = new FloatSensor(broadcast_interval*1000); 
   water_level->connect_to(new SKOutputNumber("tanks.freshWater.0.currentLevel"));	
 
   /////////////////////////////////////////////////////////////
@@ -174,6 +178,11 @@ ReactESP app([]() {
     // https://stackoverflow.com/questions/9554102/in-lambda-functions-syntax-what-purpose-does-a-capture-list-serve
     bcs[i] = new LambdaConsumer<int>([=,water_level,i](int input) {
       float lvl;
+      Serial.print("Got something on pin id=");
+      Serial.print(i);
+      Serial.print(" which is pin ");
+      Serial.print(pins[i]);
+      
       lvl = calclevel(input,i);
       water_level->set(lvl);
       handle_oled((int)(100*lvl));

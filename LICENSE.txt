@@ -15,4 +15,5 @@ Reusing Code snippets from / Drawing from the following (attributed in the code 
 
 # SensESP examples - https://github.com/SignalK/SensESP - Apache 2.0 license: https://github.com/SignalK/SensESP?tab=Apache-2.0-1-ov-file#readme
 
+# All display setup code is reused from here - https://github.com/peff74/esp8266_OLED_HW-364A - No license but clear from the intent of the README that it is okay to reuse the code (retrieved 2025-03-09)
 

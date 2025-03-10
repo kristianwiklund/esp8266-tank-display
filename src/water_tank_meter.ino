@@ -17,16 +17,24 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, OLED_RESET, OLED_SCL, OLED_SDA
 #include "transforms/debounce.h"
 
 /////////////////////////////////
-// configurations
+// configurables
 
 const int broadcast_interval=10; // seconds between transmits
+int read_delay = 10;
 
-int pins[] = {D1,D2,D3}; // array of input pins
+// D3 is the button
+// D0 is boot / program
+// D5-D6 are used for the display
+
+int pins[] = {D1,D2,D4}; // array of input pins
 const int numpins = sizeof(pins)/sizeof(int);
 
 int inputs[numpins];
 
+///////////////////////////////////
+// globals
 
+bool blanked=true; // start with display turned off
 
 //////////////////////////////////////////
 // draw a bar indicating the tank volume
@@ -36,16 +44,21 @@ void handle_oled(int progress) {
   char buffer[32];
   
   u8g2.clearBuffer();
-  u8g2.setBitmapMode(1);
-  u8g2.drawFrame(12, 21, 104, 20);
 
-  u8g2.drawBox(14, 23, progress, 16); // draw the progressbar fill
-  u8g2.setFont(u8g2_font_helvB08_tr);
-  sprintf(buffer, "Level: %d%%", progress); // construct a string with the progress variable
-  u8g2.drawStr(33, 53, buffer); // display the string
-  u8g2.setFont(u8g2_font_haxrcorp4089_tr);
-  u8g2.drawStr(0, 7, "Freshwater Tank");
-  u8g2.drawLine(0, 9, 127, 9);
+  if (!blanked) {
+  
+    u8g2.setBitmapMode(1);
+    u8g2.drawFrame(12, 21, 104, 20);
+    
+    u8g2.drawBox(14, 23, progress, 16); // draw the progressbar fill
+    u8g2.setFont(u8g2_font_helvB08_tr);
+    sprintf(buffer, "Level: %d%%", progress); // construct a string with the progress variable
+    u8g2.drawStr(33, 53, buffer); // display the string
+    u8g2.setFont(u8g2_font_haxrcorp4089_tr);
+    u8g2.drawStr(0, 7, "Freshwater Tank");
+    u8g2.drawLine(0, 9, 127, 9);
+  }
+  
   u8g2.sendBuffer();
 }
 
@@ -89,16 +102,18 @@ void FloatSensor::set(float ap) {
 /////////////////////////////////////////////////////////
 // calculate tank level based on which sensor was trigged
 
-float calclevel(int value, unsigned int sensor) {
+float calclevel(int value=-1, unsigned int sensor=-1) {
 
-  Serial.print("calclevel called with value ");
-  Serial.print(value);
-  Serial.print(" from pin id ");
-  Serial.println(sensor);
-  
-  inputs[sensor]=value;
+  if (value>-1) {
+    Serial.print("calclevel called with value ");
+    Serial.print(value);
+    Serial.print(" from pin id ");
+    Serial.println(sensor);
+    
+    inputs[sensor]=value;
 
-  Serial.println("inputs array set successfully, going to iterator");
+    Serial.println("inputs array set successfully, going to iterator");
+  }
   
   for (int i=numpins;i>0;i--) {
     Serial.println(i);
@@ -150,7 +165,7 @@ ReactESP app([]() {
   DigitalInputChange *bws[numpins];
 
   for (unsigned int i=0;i<numpins;i++) {    
-    int read_delay = 10;
+
     String read_delay_config_path = "/button_watcher/read_delay";
     bws[i] = new DigitalInputChange(pins[i], INPUT_PULLUP, CHANGE, read_delay, read_delay_config_path);
     inputs[i]=digitalRead(pins[i]);
@@ -160,6 +175,21 @@ ReactESP app([]() {
   
   handle_oled((int)(100*lvl));
   water_level->set(lvl);
+
+  ///////////////////////////////////////
+  // Also watch the button and use it to toggle the display
+
+  auto *backlight = new DigitalInputChange(D3, INPUT_PULLUP, CHANGE, read_delay);
+  auto *blconsumer = new LambdaConsumer<int>([](int input) {
+    if (input) {
+      blanked = !blanked;
+      handle_oled((int)(100*calclevel()));
+      Serial.print("Blanked =");
+      Serial.println(blanked);
+    }
+  });
+
+  backlight->connect_to(blconsumer);
   
     
   ///////////////////////////////////////

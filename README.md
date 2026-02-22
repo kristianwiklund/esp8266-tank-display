@@ -25,7 +25,15 @@ The current level is broadcast to SignalK on every sensor change, and also re-br
 
 Level is published to the path `tanks.freshWater.0.currentLevel` as a number in the range 0–1. SensESP handles the WiFi connection, websocket communication, and device configuration portal.
 
-On first boot, SensESP starts a WiFi access point for configuration. Connect to it and enter your WiFi credentials and SignalK server address.
+### WiFi Configuration
+
+WiFi credentials are not hardcoded in the firmware. Authentication is managed entirely by SensESP, which uses **ESPAsyncWiFiManager** internally:
+
+1. **First boot** (or after credentials are erased): The device starts its own WiFi access point with a captive portal. Connect to it from a phone or laptop, then enter your WiFi SSID, password, and SignalK server address via the web form.
+2. **Credentials are stored** to the ESP8266's flash memory by WifiManager.
+3. **Subsequent boots**: The device reads credentials from flash and connects directly — no portal appears.
+
+There is no place in the source code to hardcode WiFi credentials.
 
 ### OLED Display
 

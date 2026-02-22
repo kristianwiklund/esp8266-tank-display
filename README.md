@@ -37,12 +37,9 @@ There is no place in the source code to hardcode WiFi credentials.
 
 ### OLED Display
 
-The display shows:
-- A header: "Freshwater Tank"
-- A progress bar representing tank fill level
-- A text label: "Level: XX%"
+**Startup screen** — on boot the display shows WiFi/SSID and SignalK connection status until both are connected. It then holds the status screen for 10 seconds, shows the tank level progress bar for a further 10 seconds, and then blanks.
 
-The display starts **off** by default (`blanked=true`). The button on **D3** toggles it on/off. Pressing D3 when the display is off turns it on; pressing again turns it off.
+**Normal operation** — the display is off. The button on **D3** turns it on for 10 seconds, then it blanks automatically. Pressing D3 while the display is on turns it off immediately.
 
 The OLED is driven by the U8g2 library with SSD1306 controller (128×64).
 
@@ -117,3 +114,26 @@ The following values can be changed at the top of `src/water_tank_meter.ino`:
 | `read_delay` | 10 | Debounce delay (ms) for digital inputs |
 | `pins[]` | {D1, D2, D4} | Sensor input pins, ordered lowest to highest |
 | `blanked` | true | Whether the display starts off |
+
+## Troubleshooting
+
+### Display stuck on "SK: Connecting..." after WiFi connects
+
+The device has a stale SignalK authentication token stored in flash. This happens when the SK server is reset, the device is re-provisioned, or the token is revoked on the server side. A quirk in SensESP 1.x means the stored token is tested against the unauthenticated discovery endpoint, so it always appears valid even when the subsequent WebSocket connection is refused.
+
+**Fix — factory reset via browser:**
+
+1. Find the device IP address in the serial monitor output (logged when WiFi connects) or from your router's DHCP table.
+2. Navigate to `http://<device-ip>/device/reset` in a browser. The device will wipe all stored settings and reboot.
+3. On the next boot the device will send a fresh access request to the SK server. In the SK admin panel go to **Security → Access Requests** and approve the pending entry.
+4. The device stores the new token and connects.
+
+If you want to keep other configuration (e.g. a manually set SK server address) and only clear the token, PUT an empty token to the config endpoint instead:
+
+```bash
+curl -X PUT http://<device-ip>/config/network/signalk \
+  -H "Content-Type: application/json" \
+  -d '{"sk_address":"<sk-ip>","sk_port":<sk-port>,"token":"","client_id":"","polling_href":""}'
+```
+
+Then restart the device (`http://<device-ip>/device/restart`).

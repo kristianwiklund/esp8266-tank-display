@@ -1,3 +1,8 @@
+# Original display code
+
+See https://github.com/peff74/esp8266_OLED_HW-364A
+
+# Tank handling code and concept
 
 Copyright 2025 Kristian Wiklund
 

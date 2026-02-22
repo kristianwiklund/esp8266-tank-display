@@ -1,4 +1,5 @@
 #include <U8g2lib.h>
+#include <ESP8266WiFi.h>
 
 #define OLED_RESET     U8X8_PIN_NONE // Reset pin (not used)
 #define OLED_SDA 14                  // D6
@@ -36,13 +37,47 @@ int inputs[numpins];
 
 bool blanked=true; // start with display turned off
 
+bool startup_display = true;        // true while in startup/status mode
+unsigned long connected_at = 0;     // millis() when both WiFi+SK first connected
+unsigned long display_timeout = 0;  // millis() when display should auto-blank (0 = no timeout)
+
+//////////////////////////////////////////
+// show WiFi/SignalK connection status during startup
+
+void handle_startup_display() {
+  char buf[24];
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_haxrcorp4089_tr);
+
+  if (sensesp_app->isWifiConnected()) {
+    snprintf(buf, sizeof(buf), "IP: %s", WiFi.localIP().toString().c_str());
+  } else {
+    snprintf(buf, sizeof(buf), "WiFi: Connecting...");
+  }
+  u8g2.drawStr(0, 10, buf);
+
+  String ssid = WiFi.SSID();
+  if (ssid.length() > 18) ssid = ssid.substring(0, 18);
+  snprintf(buf, sizeof(buf), "SSID: %s", ssid.c_str());
+  u8g2.drawStr(0, 24, buf);
+
+  if (sensesp_app->isSignalKConnected()) {
+    u8g2.drawStr(0, 38, "SK: Connected");
+  } else {
+    u8g2.drawStr(0, 38, "SK: Connecting...");
+  }
+
+  u8g2.sendBuffer();
+}
+
 //////////////////////////////////////////
 // draw a bar indicating the tank volume
 // progress bar code from https://github.com/upiir/arduino_oled_lopaka/tree/main
 
 void handle_oled(int progress) {
+  if (startup_display) return;
   char buffer[32];
-  
+
   u8g2.clearBuffer();
 
   if (!blanked) {
@@ -143,7 +178,39 @@ ReactESP app([]() {
 #endif
 
   sensesp_app = new SensESPApp();
-  
+
+  // Startup display: update every second until WiFi+SK are both connected,
+  // then show status for 10s, then tank level for 10s, then blank.
+  app.onRepeat(1000, []() {
+    if (!startup_display) return;
+
+    handle_startup_display();
+
+    bool wifi_ok = sensesp_app->isWifiConnected();
+    bool sk_ok   = sensesp_app->isSignalKConnected();
+
+    if (wifi_ok && sk_ok) {
+      if (connected_at == 0) connected_at = millis();
+      if (millis() - connected_at >= 10000) {
+        startup_display = false;
+        blanked = false;
+        display_timeout = millis() + 10000;
+        handle_oled((int)(100 * calclevel()));
+      }
+    } else {
+      connected_at = 0; // reset if a connection drops before countdown completes
+    }
+  });
+
+  // Auto-blank the display when the timeout expires.
+  app.onRepeat(1000, []() {
+    if (!startup_display && display_timeout > 0 && millis() >= display_timeout) {
+      blanked = true;
+      display_timeout = 0;
+      handle_oled(0);  // blanked=true so this just clears the screen
+    }
+  });
+
   // sensor to send percentages to signalk, send the volume once per minute
   // (the freshwater tank is not very time-sensitive, but we need an update more
   // often than the sensors trigger the measurements)
@@ -181,11 +248,16 @@ ReactESP app([]() {
 
   auto *backlight = new DigitalInputChange(D3, INPUT_PULLUP, CHANGE, read_delay);
   auto *blconsumer = new LambdaConsumer<int>([](int input) {
-    if (input) {
-      blanked = !blanked;
-      handle_oled((int)(100*calclevel()));
-      Serial.print("Blanked =");
-      Serial.println(blanked);
+    if (input && !startup_display) {
+      if (blanked) {
+        blanked = false;
+        display_timeout = millis() + 10000;
+        handle_oled((int)(100 * calclevel()));
+      } else {
+        blanked = true;
+        display_timeout = 0;
+        handle_oled(0);
+      }
     }
   });
 

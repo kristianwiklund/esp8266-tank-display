@@ -2,6 +2,8 @@
 
 A water tank level monitor running on an ESP8266 (NodeMCU v2). It reads a set of digital sensors positioned at different heights inside a tank, derives a fill level from their combined state, and publishes it to a SignalK server as a 0–1 ratio. An optional 0.96" OLED display shows the current level as a progress bar.
 
+Based on https://github.com/peff74/esp8266_OLED_HW-364A
+
 ## How It Works
 
 ### Sensor Logic
